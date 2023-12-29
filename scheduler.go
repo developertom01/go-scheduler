@@ -6,7 +6,8 @@ import (
 )
 
 type (
-	job       func(ctx context.Context)
+	job func(ctx context.Context)
+
 	Scheduler interface {
 		//Add job to scheduler
 		Schedule(j job)
@@ -49,6 +50,7 @@ func NewScheduler() Scheduler {
 		resumeCh: make(chan struct{}, 1),
 		doneCh:   make(chan struct{}, 1),
 	}
+
 	f.finishedCond = sync.NewCond(&f.mu)
 	f.ctx, f.cancel = context.WithCancel(context.Background())
 
@@ -59,27 +61,39 @@ func NewScheduler() Scheduler {
 func (f *fifoScheduler) Schedule(j job) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
 	if f.cancel == nil {
 		panic("Scheduler is done")
 	}
+
 	if len(f.pending) == 0 {
 		select {
 		case f.resumeCh <- struct{}{}:
 		default:
 		}
 	}
+
 	f.pending = append(f.pending, j)
 }
 
 func (f *fifoScheduler) GetScheduled() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	return f.scheduled
 }
 
 func (f *fifoScheduler) GetFinished() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	return f.finished
 }
 
 func (f *fifoScheduler) GetPending() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	return len(f.pending)
 }
 
@@ -95,6 +109,7 @@ func (f *fifoScheduler) WaitFinish(n int) {
 func (f *fifoScheduler) Stop() {
 	f.mu.Lock()
 	f.cancel()
+
 	f.cancel = nil
 	f.mu.Unlock()
 	<-f.doneCh
